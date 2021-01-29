@@ -25,9 +25,9 @@ use stackable_operator::{
     create_config_map, create_tolerations, object_to_owner_reference, podutils,
 };
 use stackable_zookeeper_crd::{ZooKeeperCluster, ZooKeeperClusterSpec, ZooKeeperServer};
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::macros::support::Future;
 
@@ -41,9 +41,10 @@ type ZooKeeperReconcileResult = ReconcileResult<error::Error>;
 struct ZooKeeperState {
     context: ReconciliationContext<ZooKeeperCluster>,
     zk_spec: ZooKeeperClusterSpec,
-    id_information: RefCell<Option<IdInformation>>,
+    id_information: Arc<Mutex<Option<IdInformation>>>,
 }
 
+#[derive(Clone)]
 struct IdInformation {
     used_ids: Vec<usize>,
     node_name_to_pod: HashMap<String, Pod>,
@@ -168,7 +169,9 @@ impl ZooKeeperState {
         );
 
         let id_information = IdInformation::new(used_ids, node_name_to_pod, node_name_to_id);
-        self.id_information.replace(Some(id_information));
+
+        let mut foo = self.id_information.lock().unwrap();
+        *foo = Some(id_information);
 
         Ok(ReconcileFunctionAction::Continue)
     }
@@ -185,11 +188,11 @@ impl ZooKeeperState {
         );
 
         // TODO: Rust experts, why do I need the temporary?
-        let mut tmp = self.id_information.borrow_mut();
-        let id_information = tmp.as_mut().ok_or(error::Error::ReconcileError(
-            "id_information missing, this is a programming error and should never happen. Please report in our issue tracker.".to_string(),
-        ))?;
-
+        let id_information = Arc::clone(&self.id_information);
+        let mut id_information = id_information.lock().unwrap();
+        let id_information = id_information.as_mut().ok_or(error::Error::ReconcileError(
+                        "id_information missing, this is a programming error and should never happen. Please report in our issue tracker.".to_string(),
+                    ))?;
         // We iterate over all servers from the spec and check if we have a pod assigned to this server.
         // If not we find the next unused one and assign that.
         id_information.used_ids.sort_unstable();
@@ -228,12 +231,12 @@ impl ZooKeeperState {
     pub async fn reconcile_cluster(&self) -> ZooKeeperReconcileResult {
         trace!("{}: Starting reconciliation", self.context.log_name());
 
-        let mut id_information = self
-            .id_information
-            .take()
-            .ok_or(error::Error::ReconcileError(
-                "id_information missing, this is a programming error and should never happen. Please report in our issue tracker.".to_string(),
-            ))?;
+        let id_information = Arc::clone(&self.id_information);
+        let mut mutex_guard = id_information.lock().unwrap().clone();
+        let mut id_information = mutex_guard.as_mut().ok_or(error::Error::ReconcileError(
+                        "id_information missing, this is a programming error and should never happen. Please report in our issue tracker.".to_string(),
+                    ))?.clone();
+        drop(mutex_guard);
 
         // Iterate over all servers from the spec and
         // * check if a pod exists for this server
@@ -505,8 +508,9 @@ impl ReconciliationState for ZooKeeperState {
 
     fn reconcile_operations(
         &self,
-    ) -> Vec<Pin<Box<dyn Future<Output = Result<ReconcileFunctionAction, Self::Error>> + '_>>> {
-        let vec: Vec<Pin<Box<dyn Future<Output = ZooKeeperReconcileResult> + '_>>> = vec![
+    ) -> Vec<Pin<Box<dyn Future<Output = Result<ReconcileFunctionAction, Self::Error>> + Send + '_>>>
+    {
+        let vec: Vec<Pin<Box<dyn Future<Output = ZooKeeperReconcileResult> + Send + '_>>> = vec![
             Box::pin(self.read_existing_pod_information()),
             Box::pin(self.assign_ids()),
             Box::pin(self.reconcile_cluster()),
@@ -538,7 +542,7 @@ impl ControllerStrategy for ZooKeeperStrategy {
         ZooKeeperState {
             zk_spec: context.resource.spec.clone(),
             context,
-            id_information: RefCell::new(None),
+            id_information: Arc::new(Mutex::new(None)),
         }
     }
 }
