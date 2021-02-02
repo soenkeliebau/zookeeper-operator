@@ -84,8 +84,7 @@ impl ZooKeeperState {
     // This looks at all currently existing Pods for the current ZooKeeperCluster object.
     // It checks if all the pods are valid (i.e. contain required labels) and then builds an `IdInformation`
     // object and sets it on the current state.
-    async fn read_existing_pod_information(&self) -> ReconcileFunctionAction {
-        /*
+    async fn read_existing_pod_information(&mut self) -> ZooKeeperReconcileResult {
         trace!(
             "Reading existing pod information for {}",
             self.context.log_name()
@@ -171,9 +170,7 @@ impl ZooKeeperState {
         let mut foo = self.id_information.lock().unwrap();
         *foo = Some(id_information);
 
-
-         */
-        ReconcileFunctionAction::Continue
+        Ok(ReconcileFunctionAction::Continue)
     }
 
     /// This function looks at all the requested servers from the spec and assigns ids to those
@@ -181,7 +178,7 @@ impl ZooKeeperState {
     /// We do this here - and not later - because we need the id mapping information for the
     /// ConfigMap generation later.
     /// NOTE: This method will _not_ work if multiple servers should run on a single node
-    async fn assign_ids(&self) -> ReconcileFunctionAction {
+    async fn assign_ids(&self) -> ZooKeeperReconcileResult {
         /*
         trace!(
             "{}: Assigning ids to new servers from the spec",
@@ -228,7 +225,7 @@ impl ZooKeeperState {
 
 
          */
-        ReconcileFunctionAction::Continue
+        Ok(ReconcileFunctionAction::Continue)
     }
 
     pub async fn reconcile_cluster(&self) -> ZooKeeperReconcileResult {
@@ -508,10 +505,11 @@ impl ReconciliationState for ZooKeeperState {
 
     fn reconcile_operations(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = ReconcileFunctionAction> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<ReconcileFunctionAction, Self::Error>> + Send + '_>>
+    {
         Box::pin(async move {
             self.read_existing_pod_information()
-                .await
+                .await?
                 .then(self.assign_ids())
                 .await
         })
