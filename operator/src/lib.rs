@@ -38,7 +38,7 @@ type ZooKeeperReconcileResult = ReconcileResult<error::Error>;
 struct ZooKeeperState {
     context: ReconciliationContext<ZooKeeperCluster>,
     zk_spec: ZooKeeperClusterSpec,
-    id_information: Arc<Mutex<Option<IdInformation>>>,
+    id_information: Option<IdInformation>,
 }
 
 #[derive(Clone)]
@@ -167,8 +167,7 @@ impl ZooKeeperState {
 
         let id_information = IdInformation::new(used_ids, node_name_to_pod, node_name_to_id);
 
-        let mut foo = self.id_information.lock().unwrap();
-        *foo = Some(id_information);
+        self.id_information = Some(id_information);
 
         Ok(ReconcileFunctionAction::Continue)
     }
@@ -231,12 +230,9 @@ impl ZooKeeperState {
     pub async fn reconcile_cluster(&self) -> ZooKeeperReconcileResult {
         trace!("{}: Starting reconciliation", self.context.log_name());
 
-        let id_information = Arc::clone(&self.id_information);
-        let mut mutex_guard = id_information.lock().unwrap().clone();
-        let mut id_information = mutex_guard.as_mut().ok_or(error::Error::ReconcileError(
+        let mut id_information = self.id_information.as_ref().ok_or(error::Error::ReconcileError(
                         "id_information missing, this is a programming error and should never happen. Please report in our issue tracker.".to_string(),
                     ))?.clone();
-        drop(mutex_guard);
 
         // Iterate over all servers from the spec and
         // * check if a pod exists for this server
@@ -503,7 +499,7 @@ impl ZooKeeperState {
 impl ReconciliationState for ZooKeeperState {
     type Error = error::Error;
 
-    fn reconcile_operations(
+    fn reconcile(
         &mut self,
     ) -> Pin<Box<dyn Future<Output = Result<ReconcileFunctionAction, Self::Error>> + Send + '_>>
     {
@@ -537,7 +533,7 @@ impl ControllerStrategy for ZooKeeperStrategy {
         ZooKeeperState {
             zk_spec: context.resource.spec.clone(),
             context,
-            id_information: Arc::new(Mutex::new(None)),
+            id_information: None,
         }
     }
 }
