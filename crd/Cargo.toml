@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2021 Stackable GmbH <info@stackable.de>
+#
+# SPDX-License-Identifier: OSL-3.0
+
 [package]
 authors = ["Lars Francke <lars.francke@stackable.de>"]
 description = "Contains the Apache ZooKeeper CRD structs and utilities"

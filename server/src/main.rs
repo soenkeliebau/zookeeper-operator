@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 Stackable GmbH <info@stackable.de>
+//
+// SPDX-License-Identifier: OSL-3.0
+
 use stackable_operator::logging;
 use stackable_operator::{client, error};
 use tracing::info;

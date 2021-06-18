@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 Stackable GmbH <info@stackable.de>
+//
+// SPDX-License-Identifier: OSL-3.0
+
 pub mod error;
 pub mod util;
 

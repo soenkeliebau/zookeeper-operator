@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2021 Stackable GmbH <info@stackable.de>
+#
+# SPDX-License-Identifier: OSL-3.0
+
 %define __spec_install_post %{nil}
 %define __os_install_post %{_dbpath}/brp-compress
 %define debug_package %{nil}

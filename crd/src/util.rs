@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 Stackable GmbH <info@stackable.de>
+//
+// SPDX-License-Identifier: OSL-3.0
+
 use crate::error::Error::{
     IllegalZnode, IllegalZookeeperPath, ObjectWithoutName, OperatorFrameworkError,
     PodMissingLabels, PodWithoutHostname,

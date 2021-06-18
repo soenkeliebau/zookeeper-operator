@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2021 Stackable GmbH <info@stackable.de>
+#
+# SPDX-License-Identifier: OSL-3.0
+
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 USER root
 LABEL maintainer="Stackable GmbH"

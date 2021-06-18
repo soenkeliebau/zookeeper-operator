@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2021 Stackable GmbH <info@stackable.de>
+#
+# SPDX-License-Identifier: OSL-3.0
+
 # This script creates an RPM package containing the binary created by this Cargo project.
 # The script is not universally applicable, since it makes a few assumptions about the project structure:
 #  1. The RPM scaffolding needs to be provided in server/packaging/rpm
