@@ -3,12 +3,12 @@ kind: ZookeeperCluster
 metadata:
   name: simple
 spec:
-  version: 3.4.14
+  version: 3.5.8
   servers:
     selectors:
       default:
         selector:
           matchLabels:
-            kubernetes.io/hostname: main-1.stackable.demo
+            kubernetes.io/hostname: mdesktop
         instances: 1
         instancesPerNode: 1

@@ -648,6 +648,51 @@ impl ZookeeperState {
         let mut data = BTreeMap::new();
         data.insert("zoo.cfg".to_string(), config);
 
+        data.insert(
+            "jmx_config.yaml".to_string(),
+            r#"---
+rules:
+  # replicated Zookeeper
+  - pattern: "org.apache.ZooKeeperService<name0=ReplicatedServer_id(\\d+)><>(\\w+)"
+    name: "zookeeper_$2"
+    type: GAUGE
+  # standalone Zookeeper
+  - pattern: "org.apache.ZooKeeperService<name0=StandaloneServer_port(\\d+)><>(\\w+)"
+    type: GAUGE
+    name: "zookeeper_$2""#
+                .to_string(),
+        );
+
+        data.insert(
+            "prometheus.yaml".to_string(),
+            r#"---
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+scrape_configs:
+  - job_name: k8pods
+    scrape_interval: 10s
+    kubernetes_sd_configs:
+      - role: pod
+        #api_server: 127.0.0.1:8001
+        kubeconfig_file: /etc/rancher/k3s/k3s.yaml
+    tls_config:
+      insecure_skip_verify: true
+      cert_file: /etc/stackable/stackable-agent/secret/agent.crt
+      key_file: /etc/stackable/stackable-agent/secret/agent.key
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        regex: (.+)
+        replacement: "localhost:9404"
+        target_label: __address__
+            "#
+            .to_string(),
+        );
+
         let cm_name = format!("{}-config", pod_name);
         let cm = config_map::create_config_map(&self.context.resource, &cm_name, data)?;
         self.context.client.apply_patch(&cm, &cm).await?;
@@ -655,6 +700,7 @@ impl ZookeeperState {
         // ...and one for the data directory (which only contains the myid file)
         let mut data = BTreeMap::new();
         data.insert("myid".to_string(), id.to_string());
+
         let cm_name = format!("{}-data", pod_name);
         let cm = config_map::create_config_map(&self.context.resource, &cm_name, data)?;
         self.context.client.apply_patch(&cm, &cm).await?;
@@ -728,7 +774,7 @@ impl ZookeeperState {
             name: "zookeeper".to_string(),
             env: Some(vec![EnvVar {
                 name: "SERVER_JVMFLAGS".to_string(),
-                value: Some("-javaagent:/opt/stackable-monitoring/jmx_prometheus_javaagent-0.16.0.jar=9404:/opt/stackable-monitoring/config.yaml".to_string()),
+                value: Some("-javaagent:{{packageroot}}/apache-zookeeper-3.5.8-bin/lib/jmx_prometheus_javaagent-0.16.1.jar=9404:{{configroot}}/conf/jmx_config.yaml".to_string()),
                     ..EnvVar::default()
             }]),
             command: Some(vec![
