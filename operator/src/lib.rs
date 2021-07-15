@@ -5,10 +5,12 @@ use crate::error::Error;
 use async_trait::async_trait;
 use handlebars::Handlebars;
 use k8s_openapi::api::core::v1::{
-    ConfigMap, ConfigMapVolumeSource, Container, Node, Pod, PodSpec, Volume, VolumeMount,
+    ConfigMap, ConfigMapVolumeSource, Container, ContainerPort, EnvVar, Node, Pod, PodSpec, Volume,
+    VolumeMount,
 };
-use kube::api::{ListParams, ResourceExt};
+use kube::api::{ListParams, ObjectMeta, ResourceExt};
 use kube::Api;
+use kube::Resource;
 use serde_json::json;
 use tracing::{debug, error, info, trace, warn};
 
@@ -20,7 +22,7 @@ use stackable_operator::controller::{ControllerStrategy, ReconciliationState};
 use stackable_operator::error::OperatorResult;
 use stackable_operator::k8s_utils::LabelOptionalValueMap;
 use stackable_operator::labels;
-use stackable_operator::metadata;
+use stackable_operator::metadata::object_to_owner_reference;
 use stackable_operator::reconcile::{
     ContinuationStrategy, ReconcileFunctionAction, ReconcileResult, ReconciliationContext,
 };
@@ -677,13 +679,28 @@ impl ZookeeperState {
     ) -> Result<Pod, Error> {
         let (containers, volumes) = self.build_containers(pod_name);
 
+        let mut annotations = BTreeMap::new();
+        annotations.insert("prometheus.io/scrape".to_string(), "true".to_string());
+        annotations.insert("prometheus.io/port".to_string(), "9404".to_string());
+
         Ok(Pod {
-            metadata: metadata::build_metadata(
-                pod_name.to_string(),
-                Some(labels),
-                &self.context.resource,
-                true,
-            )?,
+            // metadata: metadata::build_metadata(
+            //     pod_name.to_string(),
+            //     Some(labels),
+            //     &self.context.resource,
+            //     true,
+            // )?,
+            metadata: ObjectMeta {
+                name: Some(pod_name.to_string()),
+                labels: Some(labels),
+                namespace: self.context.resource.namespace(),
+                owner_references: Some(vec![object_to_owner_reference::<ZookeeperCluster>(
+                    self.context.resource.meta(),
+                    true,
+                )?]),
+                annotations: Some(annotations),
+                ..Default::default()
+            },
             spec: Some(PodSpec {
                 node_name: Some(node_name.to_string()),
                 tolerations: Some(krustlet::create_tolerations()),
@@ -702,8 +719,18 @@ impl ZookeeperState {
         let image_name = format!("stackable/zookeeper:{}", version.to_string());
 
         let containers = vec![Container {
+            ports: Some(vec![ContainerPort {
+                name: Some("metrics".to_string()),
+                container_port: 9404,
+                ..Default::default()
+            }]),
             image: Some(image_name),
             name: "zookeeper".to_string(),
+            env: Some(vec![EnvVar {
+                name: "SERVER_JVMFLAGS".to_string(),
+                value: Some("-javaagent:/opt/stackable-monitoring/jmx_prometheus_javaagent-0.16.0.jar=9404:/opt/stackable-monitoring/config.yaml".to_string()),
+                    ..EnvVar::default()
+            }]),
             command: Some(vec![
                 format!("{}/bin/zkServer.sh", version.package_name()),
                 "start-foreground".to_string(),
