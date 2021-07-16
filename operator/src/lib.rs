@@ -726,8 +726,8 @@ scrape_configs:
         let (containers, volumes) = self.build_containers(pod_name);
 
         let mut annotations = BTreeMap::new();
-        annotations.insert("prometheus.io/scrape".to_string(), "true".to_string());
-        annotations.insert("prometheus.io/port".to_string(), "9404".to_string());
+        //annotations.insert("prometheus.io/scrape".to_string(), "true".to_string());
+        //annotations.insert("prometheus.io/port".to_string(), "9404".to_string());
 
         Ok(Pod {
             // metadata: metadata::build_metadata(

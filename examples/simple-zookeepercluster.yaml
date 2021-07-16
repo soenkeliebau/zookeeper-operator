@@ -9,6 +9,6 @@ spec:
       default:
         selector:
           matchLabels:
-            kubernetes.io/hostname: mdesktop
+            kubernetes.io/arch: stackable-linux
         instances: 1
         instancesPerNode: 1
