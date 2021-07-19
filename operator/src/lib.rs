@@ -656,10 +656,36 @@ rules:
   - pattern: "org.apache.ZooKeeperService<name0=ReplicatedServer_id(\\d+)><>(\\w+)"
     name: "zookeeper_$2"
     type: GAUGE
+  - pattern: "org.apache.ZooKeeperService<name0=ReplicatedServer_id(\\d+), name1=replica.(\\d+)><>(\\w+)"
+    name: "zookeeper_$3"
+    type: GAUGE
+    labels:
+      replicaId: "$2"
+  - pattern: "org.apache.ZooKeeperService<name0=ReplicatedServer_id(\\d+), name1=replica.(\\d+), name2=(\\w+)><>(Packets\\w+)"
+    name: "zookeeper_$4"
+    type: COUNTER
+    labels:
+      replicaId: "$2"
+      memberType: "$3"
+  - pattern: "org.apache.ZooKeeperService<name0=ReplicatedServer_id(\\d+), name1=replica.(\\d+), name2=(\\w+)><>(\\w+)"
+    name: "zookeeper_$4"
+    type: GAUGE
+    labels:
+      replicaId: "$2"
+      memberType: "$3"
+  - pattern: "org.apache.ZooKeeperService<name0=ReplicatedServer_id(\\d+), name1=replica.(\\d+), name2=(\\w+), name3=(\\w+)><>(\\w+)"
+    name: "zookeeper_$4_$5"
+    type: GAUGE
+    labels:
+      replicaId: "$2"
+      memberType: "$3"
   # standalone Zookeeper
   - pattern: "org.apache.ZooKeeperService<name0=StandaloneServer_port(\\d+)><>(\\w+)"
     type: GAUGE
-    name: "zookeeper_$2""#
+    name: "zookeeper_$2"
+  - pattern: "org.apache.ZooKeeperService<name0=StandaloneServer_port(\\d+), name1=InMemoryDataTree><>(\\w+)"
+    type: GAUGE
+    name: "zookeeper_$2"""#
                 .to_string(),
         );
 
@@ -774,7 +800,7 @@ scrape_configs:
             name: "zookeeper".to_string(),
             env: Some(vec![EnvVar {
                 name: "SERVER_JVMFLAGS".to_string(),
-                value: Some("-javaagent:{{packageroot}}/apache-zookeeper-3.5.8-bin/lib/jmx_prometheus_javaagent-0.16.1.jar=9404:{{configroot}}/conf/jmx_config.yaml".to_string()),
+                value: Some("-javaagent:{{packageroot}}/apache-zookeeper-3.5.8-bin/stackable/monitoring/lib/jmx_prometheus_javaagent-0.16.1.jar=9404:{{packageroot}}/apache-zookeeper-3.5.8-bin/stackable/monitoring/conf/jmx_config.yaml".to_string()),
                     ..EnvVar::default()
             }]),
             command: Some(vec![
