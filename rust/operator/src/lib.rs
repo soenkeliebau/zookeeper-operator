@@ -5,7 +5,7 @@ use stackable_zookeeper_crd::commands::{Restart, Start, Stop};
 
 use async_trait::async_trait;
 use k8s_openapi::api::core::v1::{
-    ConfigMap, EnvVar, PersistentVolume, PersistentVolumeClaim, PersistentVolumeClaimSpec,
+    ConfigMap, EnvVar, PersistentVolumeClaim, PersistentVolumeClaimSpec,
     PersistentVolumeClaimVolumeSource, Pod, ResourceRequirements, Volume,
 };
 use kube::api::{ListParams, ObjectMeta, ResourceExt};
@@ -557,6 +557,7 @@ impl ZookeeperState {
                         .collect(),
                     ),
                 }),
+                storage_class_name: Some("stackable-local".to_string()),
                 ..PersistentVolumeClaimSpec::default()
             }),
             ..PersistentVolumeClaim::default()

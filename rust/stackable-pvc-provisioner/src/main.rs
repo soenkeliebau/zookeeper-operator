@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use futures::StreamExt;
 use k8s_openapi::{
     api::core::v1::{
@@ -18,11 +16,19 @@ use kube_runtime::{
     Controller,
 };
 use snafu::{OptionExt, ResultExt, Snafu};
+use std::time::Duration;
+use structopt::StructOpt;
 
 #[derive(Debug, Snafu)]
 enum Error {
     UnbindablePvc,
     CreatePvFailed { source: kube::Error },
+}
+
+#[derive(StructOpt)]
+struct Opts {
+    #[structopt(long, default_value = "agent.stackable.tech/local")]
+    provisioner: String,
 }
 
 struct BindablePvc<'a> {
@@ -32,12 +38,15 @@ struct BindablePvc<'a> {
 }
 
 impl<'a> BindablePvc<'a> {
-    fn from(pvc: &'a PersistentVolumeClaim) -> Option<Self> {
+    fn from(pvc: &'a PersistentVolumeClaim, opts: &Opts) -> Option<Self> {
         let spec = pvc.spec.as_ref()?;
         if spec.volume_name.is_some() {
             return None;
         }
         let annotations = pvc.metadata.annotations.as_ref()?;
+        if annotations.get("volume.beta.kubernetes.io/storage-provisioner")? != &opts.provisioner {
+            return None;
+        }
         Some(Self {
             node_name: annotations.get("volume.kubernetes.io/selected-node")?,
             uid: pvc.metadata.uid.as_deref()?,
@@ -47,6 +56,7 @@ impl<'a> BindablePvc<'a> {
 }
 
 struct Ctx {
+    opts: Opts,
     pvs: Api<PersistentVolume>,
     // nodes: Api<Node>,
 }
@@ -66,13 +76,14 @@ fn object_ref_to<K: Resource<DynamicType = ()>>(obj: &K) -> ObjectReference {
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
+    let opts = Opts::from_args();
     let kube = kube::Client::try_default().await?;
     let pvcs = Api::<PersistentVolumeClaim>::all(kube.clone());
     Controller::new(pvcs, ListParams::default())
         .run(
             |pvc, ctx| async move {
                 let pvc_ref = object_ref_to(&pvc);
-                let pvc = BindablePvc::from(&pvc).context(UnbindablePvc)?;
+                let pvc = BindablePvc::from(&pvc, &ctx.get_ref().opts).context(UnbindablePvc)?;
                 let pv_name = format!("pvc-{}", pvc.uid);
                 ctx.get_ref()
                     .pvs
@@ -80,7 +91,7 @@ async fn main() -> color_eyre::Result<()> {
                         &pv_name,
                         &PatchParams {
                             force: true,
-                            field_manager: Some("stackable-pvc-provisioner".to_string()),
+                            field_manager: Some("pvc.stackable.tech".to_string()),
                             ..PatchParams::default()
                         },
                         &Patch::Apply(PersistentVolume {
@@ -129,10 +140,17 @@ async fn main() -> color_eyre::Result<()> {
                     requeue_after: None,
                 })
             },
-            |_: &Error, _| ReconcilerAction {
-                requeue_after: Some(Duration::from_secs(5)),
+            |err: &Error, _| match err {
+                // PVC itself has invalid definition, so there's no point in retrying
+                Error::UnbindablePvc => ReconcilerAction {
+                    requeue_after: None,
+                },
+                _ => ReconcilerAction {
+                    requeue_after: Some(Duration::from_secs(5)),
+                },
             },
             controller::Context::new(Ctx {
+                opts,
                 pvs: Api::<PersistentVolume>::all(kube.clone()),
                 // nodes: Api::<Node>::all(kube),
             }),
