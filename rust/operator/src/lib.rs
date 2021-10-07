@@ -1,10 +1,14 @@
 mod error;
 use crate::error::Error;
+use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use stackable_zookeeper_crd::commands::{Restart, Start, Stop};
 
 use async_trait::async_trait;
-use k8s_openapi::api::core::v1::{ConfigMap, EnvVar, Pod};
-use kube::api::{ListParams, ResourceExt};
+use k8s_openapi::api::core::v1::{
+    ConfigMap, EnvVar, PersistentVolume, PersistentVolumeClaim, PersistentVolumeClaimSpec,
+    PersistentVolumeClaimVolumeSource, Pod, ResourceRequirements, Volume,
+};
+use kube::api::{ListParams, ObjectMeta, ResourceExt};
 use kube::Api;
 use kube::CustomResourceExt;
 use product_config::types::PropertyNameKind;
@@ -520,7 +524,7 @@ impl ZookeeperState {
         // we need to add the zookeeper id to the labels
         pod_labels.insert(ID_LABEL.to_string(), pod_id.id().to_string());
 
-        let pod = PodBuilder::new()
+        let mut pod = PodBuilder::new()
             .metadata(
                 ObjectMetaBuilder::new()
                     .generate_name(pod_name)
@@ -532,8 +536,44 @@ impl ZookeeperState {
             )
             .add_stackable_agent_tolerations()
             .add_container(container_builder.build())
-            .node_name(node_name)
+            // .node_name(node_name)
             .build()?;
+        let pvc_name = format!("{}-{}", pod_id.app(), pod_id.id());
+        let pvc = PersistentVolumeClaim {
+            metadata: ObjectMeta {
+                name: Some(pvc_name.clone()),
+                namespace: Some(self.context.client.default_namespace.clone()),
+                ..ObjectMeta::default()
+            },
+            spec: Some(PersistentVolumeClaimSpec {
+                access_modes: Some(vec!["ReadWriteOnce".to_string()]),
+                resources: Some(ResourceRequirements {
+                    limits: None,
+                    requests: Some(
+                        std::array::IntoIter::new([(
+                            "storage".to_string(),
+                            Quantity("1Gi".to_string()),
+                        )])
+                        .collect(),
+                    ),
+                }),
+                ..PersistentVolumeClaimSpec::default()
+            }),
+            ..PersistentVolumeClaim::default()
+        };
+        self.context.client.apply_patch(&pvc, &pvc).await?;
+        pod.spec
+            .get_or_insert_with(Default::default)
+            .volumes
+            .get_or_insert_with(Default::default)
+            .push(Volume {
+                name: "data".to_string(),
+                persistent_volume_claim: Some(PersistentVolumeClaimVolumeSource {
+                    claim_name: pvc_name,
+                    read_only: Some(false),
+                }),
+                ..Volume::default()
+            });
 
         Ok(self.context.client.create(&pod).await?)
     }
