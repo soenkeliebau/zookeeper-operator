@@ -643,12 +643,14 @@ impl ReconciliationState for ZookeeperState {
                     true,
                 ))
                 .await?
-                .then(self.context.delete_illegal_pods(
-                    self.existing_pods.as_slice(),
-                    &self.get_required_labels(),
-                    ContinuationStrategy::OneRequeue,
-                ))
-                .await?
+                // Disabled for now, since the operator framework considers all unscheduled (spec.node_name == None)
+                // pods to be illegal
+                // .then(self.context.delete_illegal_pods(
+                //     self.existing_pods.as_slice(),
+                //     &self.get_required_labels(),
+                //     ContinuationStrategy::OneRequeue,
+                // ))
+                // .await?
                 .then(
                     self.context
                         .wait_for_terminating_pods(self.existing_pods.as_slice()),
