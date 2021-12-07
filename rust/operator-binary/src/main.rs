@@ -3,9 +3,13 @@ mod utils;
 mod zk_controller;
 mod znode_controller;
 
-use std::str::FromStr;
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use crate::utils::Tokio01ExecutorExt;
+use anyhow::Context as _;
 use futures::{compat::Future01CompatExt, StreamExt};
 use stackable_operator::{
     k8s_openapi::api::{
@@ -28,7 +32,8 @@ use stackable_zookeeper_crd::{ZookeeperCluster, ZookeeperZnode};
 use structopt::StructOpt;
 
 mod built_info {
-    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+    pub const PKG_DESCRIPTION: &str = "TODO: reintroduce built";
+    // include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
 pub const APP_NAME: &str = "zookeeper";
@@ -78,21 +83,28 @@ async fn main() -> anyhow::Result<()> {
             serde_yaml::to_string(&ZookeeperZnode::crd())?
         ),
         Cmd::Run { product_config } => {
-            stackable_operator::utils::print_startup_string(
-                built_info::PKG_DESCRIPTION,
-                built_info::PKG_VERSION,
-                built_info::GIT_VERSION,
-                built_info::TARGET,
-                built_info::BUILT_TIME_UTC,
-                built_info::RUSTC_VERSION,
-            );
-            let product_config = if let Some(product_config_path) = product_config {
-                ProductConfigManager::from_yaml_file(&product_config_path)?
-            } else {
-                ProductConfigManager::from_str(include_str!(
-                    "../../../deploy/config-spec/properties.yaml"
-                ))?
-            };
+            // stackable_operator::utils::print_startup_string(
+            //     built_info::PKG_DESCRIPTION,
+            //     built_info::PKG_VERSION,
+            //     built_info::GIT_VERSION,
+            //     built_info::TARGET,
+            //     built_info::BUILT_TIME_UTC,
+            //     built_info::RUSTC_VERSION,
+            // );
+            let product_config_path = product_config
+                .as_deref()
+                .or_else(|| {
+                    [
+                        "deploy/config-spec/properties.yaml",
+                        "/etc/stackable/zookeeper-operator/config-spec/properties.yaml",
+                    ]
+                    .into_iter()
+                    .find(|path| Path::exists(path.as_ref()))
+                })
+                .context(
+                    "could not detect product-config location, please specify --product-config",
+                )?;
+            let product_config = ProductConfigManager::from_yaml_file(&product_config_path)?;
             let kube = kube::Client::try_default().await?;
             let zks = kube::Api::<ZookeeperCluster>::all(kube.clone());
             let znodes = kube::Api::<ZookeeperZnode>::all(kube.clone());
